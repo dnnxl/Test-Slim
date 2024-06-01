@@ -1,0 +1,60 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {"CUDA_VISIBLE_DEVICES": "0"},
+            "args": [
+                "--root", "./pineapples_5m",// "../../../share/semi_supervised/pineapples/PINEAPPLES2_5mts_nosplits",//""/content/drive/MyDrive/Agro-Pineapples/pineapples_5m_multispectral"", 
+                "--num-classes","0",
+                "--load-pretrained",
+                "--timm-model", "xcit_nano_12_p8_224.fb_dist_in1k", //swinv2_base_window8_256.ms_in1k tf_efficientnet_l2.ns_jft_in1k_475 vit_base_patch16_clip_224.openai_ft_in1k
+                "--loss","mae",
+                "--optim", "sgd",
+                "--val-freq", "1",
+                "--use-semi-split",
+                "--semi-percentage", "1.0",
+                "--dataset", "coco2017",
+                "--batch-size","4",
+                "--batch-size-val", "1",
+                "--batch-size-labeled","10",
+                "--batch-size-unlabeled", "10",
+                "--batch-size-validation", "1",
+
+                "--ood-labeled-samples", "1",
+                "--ood-unlabeled-samples", "1",
+                "--ood-validation-samples", "1",
+
+                "--aug-method","rand_augmentation",
+                "--img-resolution", "1024",
+                "--new-sample-size", "256", 
+                "--numa","-1",
+                "--output-folder","PINEAPPLES2_5mts_nosplits",
+                "--run-name","temp",
+                "--seed","50",
+
+                "--sam-model","h",
+                "--ood-thresh", "0.8",
+                "--ood-histogram-bins", "15", //
+                "--use-sam-embeddings", "0",
+                "--method", "samAlone", // ss samAlone fewshot1 fewshot2 fewshotOOD fewshotRelationalNetwork fewshotMatching fewshotMahalanobis 
+                "--device", "cpu", // cuda, cpu
+                "--sam-proposal", "fastsam", // sam, fastsam, mobilesam, edgesam
+
+                // PARAMETERS FOR MAHALANOBIS 
+                "--dim-red", "svd", // svd, pca
+                "--n-components", "8", // 2, 4, 8, 16, 32
+                "--mahalanobis", "regularization", // normal, regularization
+                "--beta", "0" // 0, 1, 2
+            ]
+        }
+    ]
+}

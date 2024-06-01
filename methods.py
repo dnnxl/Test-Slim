@@ -2,9 +2,11 @@
 import warnings
 import torch
 import cv2
-
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
+from engine.fastsam_model import FASTSAM
+from engine.mobilesam_model import MobileSAM
 from engine.subspaces_filter import SubspacesFilter
+from engine.slimsam_model import SlimSAM
 
 try:
     from apex import amp
@@ -34,6 +36,7 @@ from utils import *
 from data.fewshot_data import get_batch_prototypes
 from data.transforms import Transform_To_Models
 from pycocotools.coco import COCO
+from engine import SAM, EdgeSAM
 from engine.feature_extractor import MyFeatureExtractor
 from engine.prototypical_networks import PrototypicalNetworks
 from engine.relational_networks import RelationNetworks
@@ -42,9 +45,8 @@ from engine.bdcspn import BDCSPN
 from engine.ptmap import PTMAP
 from engine.ood_filter_neg_likelihood import OOD_filter_neg_likelihood
 from engine.mahalanobis_filter import MahalanobisFilter
+from engine.autoencoder_filter import AutoencoderFilter
 
-from sam_proposal import FASTSAM, MobileSAM, SAM, EdgeSAM
-from utils.constants import SamMethod, MainMethod
 #------------------------------------------------------------------------------------------------
 
 def sam_simple(args, output_root):
@@ -67,11 +69,17 @@ def sam_simple(args, output_root):
     save_loader_to_json(validation_l, output_root, filename="validation")
 
     # STEP 2: create an SAM instance
-    if args.sam_proposal == SamMethod.MOBILE_SAM:
+    if args.sam_proposal == Constants_SamMethod.MOBILE_SAM:
         sam = MobileSAM(args)
         sam.load_simple_mask()
-    elif args.sam_proposal == SamMethod.FAST_SAM:
+    elif args.sam_proposal == Constants_SamMethod.FAST_SAM:
         sam = FASTSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.EDGE_SAM:
+        sam = EdgeSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.SLIM_SAM:
+        sam = SlimSAM(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
@@ -126,11 +134,17 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
     save_loader_to_json(validation_loader, output_root, filename="validation")
 
     # STEP 2: create an SAM instance
-    if args.sam_proposal == SamMethod.MOBILE_SAM:
+    if args.sam_proposal == Constants_SamMethod.MOBILE_SAM:
         sam = MobileSAM(args)
         sam.load_simple_mask()
-    elif args.sam_proposal == SamMethod.FAST_SAM:
+    elif args.sam_proposal == Constants_SamMethod.FAST_SAM:
         sam = FASTSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.EDGE_SAM:
+        sam = EdgeSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.SLIM_SAM:
+        sam = SlimSAM(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
@@ -150,7 +164,7 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
             args.num_classes * 2 # one additional class for background
         )
 
-    if fewshot_method == MainMethod.FEWSHOT_2_CLASSES_RELATIONAL_NETWORK:
+    if fewshot_method == Constants_MainMethod.FEWSHOT_2_CLASSES_RELATIONAL_NETWORK:
         fs_model = RelationNetworks(
             is_single_class=is_single_class,
             use_sam_embeddings=args.use_sam_embeddings,
@@ -159,7 +173,7 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
             feature_dimension = feature_extractor.features_size,
             device=args.device
         ).to(args.device)
-    elif fewshot_method == MainMethod.FEWSHOT_2_CLASSES_MATCHING:
+    elif fewshot_method == Constants_MainMethod.FEWSHOT_2_CLASSES_MATCHING:
         fs_model = MatchingNetworks(
             is_single_class=is_single_class,
             use_sam_embeddings=args.use_sam_embeddings,
@@ -168,7 +182,7 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
             feature_dimension = feature_extractor.features_size,
             device=args.device
         ).to(args.device)
-    elif fewshot_method == MainMethod.FEWSHOT_2_CLASSES_BDCSPN:
+    elif fewshot_method == Constants_MainMethod.FEWSHOT_2_CLASSES_BDCSPN:
         fs_model = BDCSPN(
             is_single_class=is_single_class,
             use_sam_embeddings=args.use_sam_embeddings,
@@ -176,7 +190,7 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
             use_softmax=False,
             device=args.device
         ).to(args.device)
-    elif fewshot_method == MainMethod.FEWSHOT_2_CLASSES_PTMAP:
+    elif fewshot_method == Constants_MainMethod.FEWSHOT_2_CLASSES_PTMAP:
         fs_model = PTMAP(
             is_single_class=is_single_class,
             use_sam_embeddings=args.use_sam_embeddings,
@@ -238,7 +252,19 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
     image_ids = coco_gt.getImgIds()[:MAX_IMAGES]
     res_data = f"{output_root}/bbox_results.json"
 
-    if is_single_class:
+    if is_single_class and fewshot_method == Constants_MainMethod.FEWSHOT_1_PROTOTYPE_CLUSTERING:
+        save_inferences_clustering_singleclass(
+            fs_model, test_loader, sam, 
+            output_root, trans_norm,
+            args.use_sam_embeddings
+        )
+
+        save_inferences_clustering_singleclass(
+            fs_model, validation_loader, sam, 
+            output_root, trans_norm,
+            args.use_sam_embeddings, val=True
+        )
+    elif is_single_class:
         save_inferences_singleclass(
             fs_model, test_loader, sam, 
             output_root, trans_norm,
@@ -326,11 +352,17 @@ def ood_filter(args, output_root):
 
     # STEP 2: run the ood filter using inferences from SAM
     # sam instance - default values of the model
-    if args.sam_proposal == SamMethod.MOBILE_SAM:
+    if args.sam_proposal == Constants_SamMethod.MOBILE_SAM:
         sam = MobileSAM(args)
         sam.load_simple_mask()
-    elif args.sam_proposal == SamMethod.FAST_SAM:
+    elif args.sam_proposal == Constants_SamMethod.FAST_SAM:
         sam = FASTSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.EDGE_SAM:
+        sam = EdgeSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.SLIM_SAM:
+        sam = SlimSAM(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
@@ -490,11 +522,14 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
 
     # sam instance - default values of the model
     # STEP 2: create an SAM instance
-    if args.sam_proposal == SamMethod.MOBILE_SAM:
+    if args.sam_proposal == Constants_SamMethod.MOBILE_SAM:
         sam = MobileSAM(args)
         sam.load_simple_mask()
-    elif args.sam_proposal == SamMethod.FAST_SAM:
+    elif args.sam_proposal == Constants_SamMethod.FAST_SAM:
         sam = FASTSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.EDGE_SAM:
+        sam = EdgeSAM(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
@@ -517,6 +552,73 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         dir_filtered_root=output_root,
         mahalanobis_method=mahalanobis_method, beta=beta, seed=args.seed,
         lambda_mahalanobis=args.mahalanobis_lambda
+    )
+
+    # STEP 3: evaluate results
+    #if is_single_class:
+    MAX_IMAGES = 100000
+    gt_eval_path = f"{output_root}/test.json"
+    coco_gt = COCO(gt_eval_path)
+    image_ids = coco_gt.getImgIds()[:MAX_IMAGES]
+    res_data = f"{output_root}/bbox_results.json"
+
+    eval_sam(
+        coco_gt, image_ids, res_data, 
+        output_root, method=args.method,
+    )
+
+    gt_eval_path = f"{output_root}/validation.json"
+    coco_eval_gt = COCO(gt_eval_path)
+    image_eval_ids = coco_eval_gt.getImgIds()[:MAX_IMAGES]
+    res_eval_data = f"{output_root}/bbox_results_val.json"
+
+    eval_sam(
+        coco_eval_gt, image_eval_ids, res_eval_data, 
+        output_root, method=args.method, val=True
+    )
+    #else:
+    #    print("No implemented for multiple class mahalanobis!")
+
+def autoencoder_filter(args, is_single_class=True, output_root=None):
+    """ Use sam and fewshot (maximum likelihood) to classify masks.
+    Params
+    :args -> parameters from bash.
+    :output_root (str) -> output folder location.
+    """
+    # STEP 1: create data loaders
+    labeled_loader, test_loader,_,_, validation_loader = create_datasets_and_loaders(args)
+    # save new gt into a separate json file
+    if not os.path.exists(output_root):
+        os.makedirs(output_root)
+    # save gt
+    save_loader_to_json(test_loader, output_root, "test")
+    save_loader_to_json(validation_loader, output_root, "validation")
+
+    # sam instance - default values of the model
+    # STEP 2: create an SAM instance
+    if args.sam_proposal == Constants_SamMethod.MOBILE_SAM:
+        sam = MobileSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.FAST_SAM:
+        sam = FASTSAM(args)
+        sam.load_simple_mask()
+    else:
+        sam = SAM(args)
+        sam.load_simple_mask()
+
+    # instance the main class and instance the timm model
+    autoencoder_filter = AutoencoderFilter(
+        timm_model=args.timm_model, 
+        timm_pretrained=args.load_pretrained,
+        sam_model=sam,
+        use_sam_embeddings=args.use_sam_embeddings,
+        is_single_class=is_single_class
+    )
+
+    # run filter using the backbone, sam, and ood
+    autoencoder_filter.run_filter(
+        labeled_loader, test_loader, validation_loader,
+        dir_filtered_root=output_root
     )
 
     # STEP 3: evaluate results
@@ -551,19 +653,20 @@ def subspaces_filter(args, is_single_class=True, output_root=None):
     :output_root (str) -> output folder location.
     """
     # STEP 1: create data loaders
-    labeled_loader, test_loader,_,_ = create_datasets_and_loaders(args)
+    labeled_loader, test_loader,_,_, validation_loader = create_datasets_and_loaders(args)
     # save new gt into a separate json file
     if not os.path.exists(output_root):
         os.makedirs(output_root)
     # save gt
     save_loader_to_json(test_loader, output_root, "test")
+    save_loader_to_json(validation_loader, output_root, "validation")
 
     # sam instance - default values of the model
     # STEP 2: create an SAM instance
-    if args.sam_proposal == SamMethod.MOBILE_SAM:
+    if args.sam_proposal == Constants_SamMethod.MOBILE_SAM:
         sam = MobileSAM(args)
         sam.load_simple_mask()
-    elif args.sam_proposal == SamMethod.FAST_SAM:
+    elif args.sam_proposal == Constants_SamMethod.FAST_SAM:
         sam = FASTSAM(args)
         sam.load_simple_mask()
     else:
@@ -581,21 +684,34 @@ def subspaces_filter(args, is_single_class=True, output_root=None):
 
     # run filter using the backbone, sam, and ood
     subspaces_filter.run_filter(
-        labeled_loader, test_loader, 
+        labeled_loader, test_loader, validation_loader,
         dir_filtered_root=output_root
     )
 
     # STEP 3: evaluate results
-    MAX_IMAGES = 100000
-    gt_eval_path = f"{output_root}/test.json"
-    coco_gt = COCO(gt_eval_path)
-    image_ids = coco_gt.getImgIds()[:MAX_IMAGES]
-    res_data = f"{output_root}/bbox_results.json"
+    if is_single_class:
+        MAX_IMAGES = 100000
+        gt_eval_path = f"{output_root}/test.json"
+        coco_gt = COCO(gt_eval_path)
+        image_ids = coco_gt.getImgIds()[:MAX_IMAGES]
+        res_data = f"{output_root}/bbox_results.json"
 
-    eval_sam(
-        coco_gt, image_ids, res_data, 
-        output_root, method=args.method,
-    )
+        eval_sam(
+            coco_gt, image_ids, res_data, 
+            output_root, method=args.method,
+        )
+
+        gt_eval_path = f"{output_root}/validation.json"
+        coco_eval_gt = COCO(gt_eval_path)
+        image_eval_ids = coco_eval_gt.getImgIds()[:MAX_IMAGES]
+        res_eval_data = f"{output_root}/bbox_results_val.json"
+
+        eval_sam(
+            coco_eval_gt, image_eval_ids, res_eval_data, 
+            output_root, method=args.method, val=True
+        )
+    else:
+        print("No implemented for multiple class mahalanobis!")
         
 
 if __name__ == '__main__':
@@ -612,28 +728,36 @@ if __name__ == '__main__':
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}@samEmbed@{args.sam_proposal}"
     else:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}@{args.timm_model}@{args.sam_proposal}"
-    if args.method == MainMethod.SELECTIVE_SEARCH:
+    if args.method == Constants_MainMethod.SELECTIVE_SEARCH:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}"
         selective_search(args, output_root)
-    if args.method == MainMethod.ALONE:
+    if args.method == Constants_MainMethod.ALONE:
         output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}@{args.sam_proposal}"
         sam_simple(args, output_root)
-    elif args.method == MainMethod.FEWSHOT_1_CLASS:
+    elif args.method == Constants_MainMethod.FEWSHOT_1_CLASS:
         few_shot(args, is_single_class=True, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_2_CLASSES:
+    elif args.method == Constants_MainMethod.FEWSHOT_2_CLASSES:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_OOD:
+    elif args.method == Constants_MainMethod.FEWSHOT_OOD:
         ood_filter(args, output_root)
-    elif args.method == MainMethod.FEWSHOT_2_CLASSES_RELATIONAL_NETWORK:
+    elif args.method == Constants_MainMethod.FEWSHOT_2_CLASSES_RELATIONAL_NETWORK:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_2_CLASSES_MATCHING:
+    elif args.method == Constants_MainMethod.FEWSHOT_2_CLASSES_MATCHING:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_2_CLASSES_BDCSPN:
+    elif args.method == Constants_MainMethod.FEWSHOT_2_CLASSES_BDCSPN:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_2_CLASSES_PTMAP:
+    elif args.method == Constants_MainMethod.FEWSHOT_2_CLASSES_PTMAP:
         few_shot(args, is_single_class=False, output_root=output_root, fewshot_method=args.method)
-    elif args.method == MainMethod.FEWSHOT_MAHALANOBIS:
-        output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}_{args.mahalanobis}_beta_{args.beta}_lambda_{args.mahalanobis_lambda}@{args.timm_model}@{args.sam_proposal}@{args.dim_red}_{args.n_components}"
-        mahalanobis_filter(args, is_single_class=True, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)
-    elif args.method == MainMethod.FEWSHOT_SUBSPACES:
+    elif args.method == Constants_MainMethod.FEWSHOT_1_PROTOTYPE_CLUSTERING:
+        few_shot(args, is_single_class=True, output_root=output_root, fewshot_method=args.method)
+    elif args.method == Constants_MainMethod.FEWSHOT_MAHALANOBIS:
+        output_root = f"{root_output}{args.output_folder}/seed{args.seed}/{args.ood_labeled_samples}_{args.ood_unlabeled_samples}/{args.method}_{args.mahalanobis}_{args.num_classes}_beta_{args.beta}_lambda_{args.mahalanobis_lambda}@{args.timm_model}@{args.sam_proposal}@{args.dim_red}_{args.n_components}"
+        if args.num_classes == 0:
+           mahalanobis_filter(args, is_single_class=True, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)
+        else:
+           mahalanobis_filter(args, is_single_class=False, output_root=output_root, mahalanobis_method=args.mahalanobis, beta=args.beta)
+
+    elif args.method == Constants_MainMethod.FEWSHOT_1_AUTOENCODER:
+        autoencoder_filter(args, is_single_class=True, output_root=output_root)
+    elif args.method == Constants_MainMethod.FEWSHOT_SUBSPACES:
         subspaces_filter(args, is_single_class=True, output_root=output_root)

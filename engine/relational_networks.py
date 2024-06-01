@@ -61,7 +61,7 @@ class RelationNetworks(FewShot):
         self.use_sam_embeddings = use_sam_embeddings
         self.preprocess = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((self.backbone.input_size, self.backbone.input_size)),
+            transforms.Resize((64, 64)),
             transforms.ToTensor()
         ])
 
@@ -79,6 +79,7 @@ class RelationNetworks(FewShot):
         """
         with torch.no_grad():
             x =  self.backbone.forward_features(img.unsqueeze(dim=0).to(self.device))
+            #print("X", x.shape)
         return x
 
     def get_embeddings_sam(self, img):
@@ -118,9 +119,12 @@ class RelationNetworks(FewShot):
             else:
                 t_temp = self.get_embeddings_timm(img)
             support_features.append(t_temp.squeeze().cpu())
-
+        print("t_temp.squeeze().cpu().shape", t_temp.squeeze().cpu().shape)
         # get prototypes and save them into cuda memory
         support_features = torch.stack(support_features)
+
+        print("support_features.shape", support_features.shape)
+
         if self.is_single_class:
             print("Not implemented!")
         else:
@@ -148,6 +152,8 @@ class RelationNetworks(FewShot):
         # constructed tensor is of shape (n_queries * n_prototypes, 2 * n_channels, width, height)
         # (2 * n_channels because prototypes and queries are concatenated)
         print("z_query: ", z_query.shape)
+        print("prototypes: ", self.prototypes.shape)
+
         query_prototype_feature_pairs = torch.cat(
             (
                 self.prototypes.unsqueeze(dim=0).expand(

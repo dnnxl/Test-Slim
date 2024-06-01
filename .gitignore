@@ -168,4 +168,5 @@ output_1/
 code
 vscode_cli.tar.gz
 test
-pineapples_5m/
+/pineapples_5m
+/pineapples_5m_multispectral

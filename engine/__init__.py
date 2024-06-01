@@ -6,6 +6,12 @@ from .prototypical_networks import *
 from .matching_networks import *
 from .relational_networks import *
 from .bdcspn import *
+from .sam_model import *
+from .fastsam_model import *
+from .mobilesam_model import *
 from .mahalanobis_filter import *
 from .ptmap import *
 from .subspaces_filter import *
+from .autoencoder_filter import *
+from .edgesam_model import *
+from .slimsam_model import SlimSAM

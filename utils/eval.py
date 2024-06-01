@@ -173,6 +173,88 @@ def save_inferences_twoclasses(
                 os.remove(f_)
             json.dump(results, open(f_, 'w'), indent=4)
 
+def calculate_lower_upper_bounds(list_stats, idx_float):
+    stats_upper_lower = []
+    for stats in list_stats:
+        mean = stats[1]
+        std = stats[2]
+        lower = mean - (idx_float*std)
+        upper = mean + (idx_float*std)
+        stats_upper_lower.append((stats[0], lower, upper))
+    return stats_upper_lower
+
+def is_distance_inside(stats_upper_lower, distances):
+
+    for distance, stats in zip(distances[0], stats_upper_lower):
+        if distance.item() <= stats[2] and distance.item() >= stats[1]:
+            return True 
+    return False
+
+def save_inferences_clustering_singleclass(
+        fs_model, unlabeled_loader,
+        sam_model, filepath,
+        trans_norm,
+        use_sam_embeddings, val=False
+    ):
+    fs_model.backbone.use_fc = False
+    
+    imgs_ids = []
+    imgs_box_coords = []
+    imgs_scores = []
+    unlabeled_imgs = []
+
+    # collect all inferences from SAM
+    for (_, batch) in tqdm(enumerate(unlabeled_loader), total= len(unlabeled_loader)):
+
+        # every batch is a tuple: (torch.imgs , metadata_and_bboxes)
+        # ITERATE: IMAGE
+        for idx in list(range(batch[1]['img_idx'].numel())):
+            # get foreground samples (from sam predictions)
+            imgs_s, box_coords, scores = sam_model.get_unlabeled_samples(
+                batch, idx, trans_norm, use_sam_embeddings
+            )
+            # accumulate SAM info (inferences)
+            unlabeled_imgs += imgs_s
+            imgs_ids += [batch[1]['img_orig_id'][idx].item()] * len(imgs_s)
+            imgs_box_coords += box_coords
+            imgs_scores += scores
+
+    # store std for 1 and for 2 and 3
+    # for idx_1 in range(1,4):
+
+    results = []
+    list_stats_computed = fs_model.stats_computed
+
+
+    idx_1 = 2
+    idx_float = float(idx_1)
+    stats_upper_lower = calculate_lower_upper_bounds(list_stats_computed, idx_float)
+    for idx_,sample in enumerate(unlabeled_imgs):
+        distance = fs_model(sample)
+
+        # distance is inside the first std from the mean
+        if  is_distance_inside(stats_upper_lower, distance):
+            image_result = {
+                'image_id': imgs_ids[idx_],
+                'category_id': 1,
+                'score': imgs_scores[idx_],
+                'bbox': imgs_box_coords[idx_],
+            }
+            results.append(image_result)
+        
+    if len(results) > 0:
+        # write output
+        if val:
+            f_ = f"{filepath}/bbox_results_val_std{idx_1}.json"
+            if os.path.exists(f_):
+                os.remove(f_)
+            json.dump(results, open(f_, 'w'), indent=4)
+        else:
+            f_ = f"{filepath}/bbox_results_std{idx_1}.json"
+            if os.path.exists(f_):
+                os.remove(f_)
+            json.dump(results, open(f_, 'w'), indent=4)
+
 def calculate_precision(coco_eval, iou_treshold_index, img_id_size):
     imgs = coco_eval.evalImgs
     print("Images len: ", len(imgs))

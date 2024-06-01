@@ -8,9 +8,9 @@ import numpy as np
 from engine.feature_extractor import MyFeatureExtractor
 from data import get_foreground, Transform_To_Models, get_background
 from tqdm import tqdm
-from numpy import linalg as la
 from sklearn.decomposition import TruncatedSVD, PCA
-from utils.constants import DimensionalityReductionMethod
+from sklearn.manifold import Isomap
+from utils import *
 
 class MahalanobisFilter:
 
@@ -148,7 +148,6 @@ class MahalanobisFilter:
             context_covariance_matrix = self.estimate_covariance(context_features) #self.estimate_covariance(context_features)
 
         if lambda_mahalanobis==-1.0:
-            print(lambda_mahalanobis)
             lambda_k_tau = (support_set.size(0) / (support_set.size(0) + 1))
         else:
             lambda_k_tau = lambda_mahalanobis
@@ -162,6 +161,7 @@ class MahalanobisFilter:
             print("The matrix is positive semi-definite.")
         else:
             print("The matrix is neither positive definite nor positive semi-definite.")
+        return self.inv_cov, self.mean
 
         
     @staticmethod
@@ -188,13 +188,20 @@ class MahalanobisFilter:
         return dist.sqrt()
 
     def predict(self, embeddings):
-        distances = self.mahalanobis_distance(embeddings, self.mean, self.inv_cov)
-        mean_value = torch.mean(distances).item()
-        std_deviation = torch.std(distances).item()
-        print(distances)
-        print("Mean predicted:", mean_value)
-        print("Standard Deviation predicted:", std_deviation)
-        return distances
+        if self.is_single_class:
+            distances = self.mahalanobis_distance(embeddings, self.mean, self.inv_cov)
+            return distances
+        else:
+            list_labels = []
+            for emb in embeddings:
+                distances_back = self.mahalanobis_distance(emb.unsqueeze(dim=0), self.mean_background, self.cov_background)
+                distances_label = self.mahalanobis_distance(emb.unsqueeze(dim=0), self.mean_labeled, self.cov_labeled)
+                if distances_back.item() > distances_label.item():
+                    list_labels.append(0)
+                else:
+                    list_labels.append(1)
+            return torch.Tensor(list_labels)
+
     
     def fit_svd(self, x, n_components=10):
         self.svd = TruncatedSVD(n_components=n_components)
@@ -203,7 +210,7 @@ class MahalanobisFilter:
     def fit_pca(self, x, n_components=10):
         self.pca = PCA(n_components=n_components)
         self.pca.fit(x)
-        
+
     def run_filter(self,
         labeled_loader,
         unlabeled_loader, validation_loader,
@@ -249,49 +256,50 @@ class MahalanobisFilter:
             back_imgs_context = random.Random(seed).sample(back_imgs_context, 512)
 
         # get all features maps using: the extractor + the imgs
-        torch.save
-
         all_labeled_features = self.get_all_features(labeled_imgs)
-        all_background_features = self.get_all_features(back_imgs_context)
+        if mahalanobis_method == "regularization":
+            all_background_features = self.get_all_features(back_imgs_context)
 
-        all_context_features = all_labeled_features + random.Random(seed).sample(all_background_features, len(all_labeled_features))
-        all_features = all_labeled_features + all_background_features
+            all_context_features = all_labeled_features + random.Random(seed).sample(all_background_features, len(all_labeled_features))
+            all_features = all_labeled_features + all_background_features
 
+            all_context_features = torch.stack(all_context_features)        
+            all_features = torch.stack(all_features)        
+
+            all_background_features = torch.stack(random.Random(seed).sample(all_background_features, len(all_labeled_features))) 
+
+            
+        # 2. Calculating the mean prototype for the labeled data
+        #----------------------------------------------------------------
+        all_labeled_features = torch.stack(all_labeled_features)
         #----------------------------------------------------------------
         if self.is_single_class:
             labels = np.zeros(len(all_labeled_features))
         else:
             labels = np.array(labels)
 
-        # 2. Calculating the mean prototype for the labeled data
-        #----------------------------------------------------------------
-        all_labeled_features = torch.stack(all_labeled_features)
-        all_context_features = torch.stack(all_context_features)        
-        all_features = torch.stack(all_features)        
-
-        dim_original = all_features.shape[1]
-
         # 3. Calculating the sigma (covariance matrix), the distances 
         # with respect of the support features and get the threshold
         #----------------------------------------------------------------
-        if self.is_single_class:
             
-            # Dimensionality reduction usign SVD for all the features including foreground and background
-            if self.dim_red == DimensionalityReductionMethod.SVD:
-                self.fit_svd(all_features.detach().numpy(), n_components=self.n_components)
-                all_labeled_features = torch.Tensor(self.svd.transform(all_labeled_features.detach().numpy()))
-                all_context_features = torch.Tensor(self.svd.transform(all_context_features.detach().numpy()))
-            elif self.dim_red == DimensionalityReductionMethod.PCA:
-                self.fit_pca(all_features.detach().numpy(), n_components=self.n_components)
-                all_labeled_features = torch.Tensor(self.pca.transform(all_labeled_features.detach().numpy()))
-                all_context_features = torch.Tensor(self.pca.transform(all_context_features.detach().numpy()))
-            
-            # Estimate covariance and mean for mahalanobis 
-            if mahalanobis_method == "regularization":
-                self.fit_regularization(all_labeled_features, beta=beta, context_features=all_context_features, lambda_mahalanobis=lambda_mahalanobis)
-            else:
-                self.fit_normal(all_labeled_features)
+        # Dimensionality reduction usign SVD for all the features including foreground and background
+        if self.dim_red == Constants_DimensionalityReductionMethod.SVD:
+            self.fit_svd(all_features.detach().numpy(), n_components=self.n_components)
+            all_labeled_features = torch.Tensor(self.svd.transform(all_labeled_features.detach().numpy()))
+            all_context_features = torch.Tensor(self.svd.transform(all_context_features.detach().numpy()))
+            all_background_features = torch.Tensor(self.svd.transform(all_background_features.detach().numpy()))
 
+        if mahalanobis_method == "regularization":
+            if not self.is_single_class:
+                print("Two classes")
+                self.cov_background, self.mean_background = self.fit_regularization(all_background_features, beta=beta, context_features=all_context_features, lambda_mahalanobis=lambda_mahalanobis)
+                self.cov_labeled, self.mean_labeled = self.fit_regularization(all_labeled_features, beta=beta, context_features=all_context_features, lambda_mahalanobis=lambda_mahalanobis)
+            else:
+                self.fit_regularization(all_labeled_features, beta=beta, context_features=all_context_features, lambda_mahalanobis=lambda_mahalanobis)
+        else:
+            self.fit_normal(all_labeled_features)
+
+        if self.is_single_class:
             # Calculate the distances of the support 
             distances = self.predict(all_labeled_features)
 
@@ -299,22 +307,8 @@ class MahalanobisFilter:
             Q1 = np.percentile(distances.numpy(), 25)
             Q3 = np.percentile(distances.numpy(), 75)
             IQR = Q3 - Q1
-            threshold = 1.5 * IQR #1.2 * IQR 
+            threshold = 1.2 * IQR #1.2 * IQR 
             self.threshold = Q3 + threshold 
-
-        stats_count = {
-            "lambda_support_set": float(lambda_mahalanobis), 
-            "labeled": int(all_labeled_features.shape[0]), 
-            "dimension": int(dim_original),
-            "reduced_dimension": int(all_labeled_features.shape[1]), 
-            "all": int(all_features.shape[0]), 
-            "context": int(all_context_features.shape[0]),
-            "threshold": float(self.threshold),
-            "max": float(np.max(distances.numpy())),
-            "positive_definite": bool(self.is_positive_definite(self.inv_cov)),
-            "semi_positive_definite": bool(self.is_positive_semidefinite(self.inv_cov))}
-        
-        self.save_stats(dir_filtered_root, stats_count)
 
         self.evaluate(unlabeled_loader, dir_filtered_root, "bbox_results")
         self.evaluate(validation_loader, dir_filtered_root, "bbox_results_val")
@@ -352,9 +346,9 @@ class MahalanobisFilter:
             featuremaps = torch.stack(featuremaps_list) # e.g. [387 x 512]
 
             # Reduce dimensionality
-            if self.dim_red == DimensionalityReductionMethod.SVD:
+            if self.dim_red == Constants_DimensionalityReductionMethod.SVD:
                 featuremaps = torch.Tensor(self.svd.transform(featuremaps.detach().numpy()))
-            elif self.dim_red == DimensionalityReductionMethod.PCA:
+            elif self.dim_red == Constants_DimensionalityReductionMethod.PCA:
                 featuremaps = torch.Tensor(self.pca.transform(featuremaps.detach().numpy()))
 
             # init buffer with distances
@@ -375,12 +369,16 @@ class MahalanobisFilter:
             scores += [distances_all[j].item()]
         scores = np.array(scores).reshape((len(scores),1))
 
-        limit = self.threshold 
+        if self.is_single_class:
+            limit = self.threshold
+        else:
+            limit = 0 
         # accumulate results
         results = []
         print("Scores: ", len(scores))
         count = 0
         for index, score in enumerate(scores):
+            
             if(score.item() <= limit):
                 image_result = {
                     'image_id': imgs_ids[index],

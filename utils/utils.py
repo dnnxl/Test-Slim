@@ -9,6 +9,37 @@ from pycocotools.cocoeval import COCOeval
 from data import create_dataset_ood
 from data import transforms_toNumpy, create_loader
 
+class Constants_AugMethod:
+    NO_AUGMENTATION = 'no_augmentation'
+    RAND_AUGMENT = 'rand_augmentation'
+
+class Constants_MainMethod:
+    ALONE = 'samAlone'
+    FEWSHOT_1_CLASS = 'fewshot1'
+    FEWSHOT_2_CLASSES = 'fewshot2'
+    FEWSHOT_OOD = 'fewshotOOD'
+    FEWSHOT_2_CLASSES_RELATIONAL_NETWORK = 'fewshotRelationalNetwork'
+    FEWSHOT_2_CLASSES_MATCHING = 'fewshotMatching'
+    FEWSHOT_2_CLASSES_BDCSPN = 'fewshotBDCSPN'
+    FEWSHOT_MAHALANOBIS = 'fewshotMahalanobis'
+    FEWSHOT_SUBSPACES = 'fewshotSubspaces'
+    FEWSHOT_2_CLASSES_PTMAP = 'fewshotPTMap'
+    FEWSHOT_1_PROTOTYPE_CLUSTERING = 'fewshotPrototypeClustering'
+    FEWSHOT_1_AUTOENCODER = 'autoencoder'
+    SELECTIVE_SEARCH = 'ss'
+
+class Constants_SamMethod:
+    SAM = 'sam'
+    MOBILE_SAM = 'mobilesam'
+    FAST_SAM = 'fastsam'
+    EDGE_SAM = 'edgesam'
+    HQ_SAM = 'samhq'
+    SLIM_SAM = 'slimsam'
+
+class Constants_DimensionalityReductionMethod:
+    SVD = 'svd'
+    PCA = 'pca'
+
 def add_bool_arg(parser, name, default=False, help=''):
     dest_name = name.replace('-', '_')
     group = parser.add_mutually_exclusive_group(required=False)
@@ -60,7 +91,7 @@ def get_parameters():
     parser.add_argument('--batch-size', type=int, default=4)
     parser.add_argument('--batch-size-val', type=int, default=64)
     parser.add_argument('--reprob', type=float, default=0.)
-    parser.add_argument('--aug-method', type=str, default="no_augmentation")
+    parser.add_argument('--aug-method', type=str, default=Constants_AugMethod.NO_AUGMENTATION)
     parser.add_argument('--img-resolution', type=int, default=512)
     parser.add_argument('--new-sample-size', type=int, default=224)
     parser.add_argument('--batch-size-labeled', type=int, default=1)

@@ -1,0 +1,122 @@
+Each run takes: 13 min in A100.
+PINEAPPLES2_5mts_nosplits_ALL_METHODS
+
+----------------------------------------------------------------
+Matching Networks
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Labels: '1,1' '2,1' '3,2' '4,2' '5,2' '6,3' '7,3' '8,3' '9,4' '10,4'
+Models proposal: SAM, Mobile SAM, Fast SAM.
+Models embeddings: 'xcit_nano_12_p8_224.fb_dist_in1k' 'swinv2_base_window8_256.ms_in1k' 'tf_efficientnet_l2.ns_jft_in1k_475' 'vit_base_patch16_clip_224.openai_ft_in1k'
+
+First script method_matching_network_1.sh: '0' '1' 
+Second script method_matching_network_2.sh: '5' '7' '11'
+
+TOTAL RUNS: 600 
+DURATION: 12.5 días
+
+----------------------------------------------------------------
+BDCSPN Networks
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Labels: '1,1' '2,1' '3,2' '4,2' '5,2' '6,3' '7,3' '8,3' '9,4' '10,4'
+Models proposal: SAM, Mobile SAM, Fast SAM.
+Models embeddings: 'xcit_nano_12_p8_224.fb_dist_in1k' 'swinv2_base_window8_256.ms_in1k' 'tf_efficientnet_l2.ns_jft_in1k_475' 'vit_base_patch16_clip_224.openai_ft_in1k'
+
+First script: '0' '1'
+Second script: '5' '7'
+Third script: '11'
+
+TOTAL RUNS: 600
+DURATION: 12.5 días
+
+----------------------------------------------------------------
+Fewshot OOD Filter
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Labels: '1,1' '2,1' '3,2' '4,2' '5,2' '6,3' '7,3' '8,3' '9,4' '10,4'
+Models proposal: SAM, Mobile SAM, Fast SAM.
+Models embeddings: 'xcit_nano_12_p8_224.fb_dist_in1k' 'swinv2_base_window8_256.ms_in1k' 'tf_efficientnet_l2.ns_jft_in1k_475' 'vit_base_patch16_clip_224.openai_ft_in1k'
+
+First script: '0' '1'
+Second script: '5' '7'
+Third script: '11'
+
+TOTAL RUNS: 600
+DURATION: 8.3 días
+
+----------------------------------------------------------------
+Fewshot1 Networks
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Labels: '1,1' '2,1' '3,2' '4,2' '5,2' '6,3' '7,3' '8,3' '9,4' '10,4'
+Models proposal: SAM, Mobile SAM, Fast SAM.
+Models embeddings: 'xcit_nano_12_p8_224.fb_dist_in1k' 'swinv2_base_window8_256.ms_in1k' 'tf_efficientnet_l2.ns_jft_in1k_475' 'vit_base_patch16_clip_224.openai_ft_in1k'
+
+First script: '0' '1'
+Second script: '5' '7' '11'
+
+TOTAL RUNS: 600
+DURATION: 8.3 días
+
+----------------------------------------------------------------
+Mahalanobis Filter
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Labels: '1,1' '2,1' '3,2' '4,2' '5,2' '6,3' '7,3' '8,3' '9,4' '10,4'
+Models proposal: SAM, Mobile SAM, Fast SAM.
+Models embeddings: 'xcit_nano_12_p8_224.fb_dist_in1k' 'swinv2_base_window8_256.ms_in1k' 'tf_efficientnet_l2.ns_jft_in1k_475' 'vit_base_patch16_clip_224.openai_ft_in1k'
+
+First script: '0' '1'
+Second script: '5' '7'
+Third script: '11'
+
+TOTAL RUNS: 600
+DURATION: 8.3 días
+
+----------------------------------------------------------------
+SAM Alone
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Models proposal: SAM, Mobile SAM, Fast SAM.
+TOTAL RUNS: 15
+
+
+----------------------------------------------------------------
+Mahalanobis Lambda influence
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Models proposal: Fast SAM.
+Labels: '1,1' '2,1' '3,2' '4,2' '5,2'
+Dimension: '4' '8' '16' '32' '64'
+Mahalanobis mode: Normal, Regularization 
+Dimensionality reduction: None, SVD
+
+DURATION: 
+TOTAL RUNS: 
+
+----------------------------------------------------------------
+Mahalanobis beta influence
+----------------------------------------------------------------
+Seeds: '0' '1' '5' '7' '11'
+Models proposal: Fast SAM.
+Labels: '1,1' '2,1' '3,2' '4,2' '5,2'
+Dimension: '4' '8' '16' '32' '64'
+Mahalanobis mode: Normal, Regularization 
+Dimensionality reduction: None, SVD
+
+DURATION: 
+TOTAL RUNS: 
+
+
+Colas to run: 
+- nukwa-04.cnca
+- nukwa-05.cnca
+- nukwa-06.cnca
+
+#SBATCH --partition=nukwa-long
+#SBATCH --ntasks=1
+#SBATCH --time=168:00:00
+#SBATCH --nodelist=nukwa-04.cnca
+
+

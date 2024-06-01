@@ -28,6 +28,8 @@ class Timm_head_names:
     DENSENET = "densenet121.ra_in1k"
     WIDERESNET = "wide_resnet50_2.racm_in1k"
 
+    MAE = "vit_base_patch16_224.mae"
+
 class Identity(nn.Module):
     """ Identity to remove one layer """
     def __init__(self):
@@ -69,7 +71,7 @@ class MyFeatureExtractor(nn.Module):
             self.is_transformer = True
 
         elif model_name == Timm_head_names.ViT or \
-            model_name == Timm_head_names.VIT_GIGANTIC or model_name == Timm_head_names.OPENAI_CLIP_MODEL or model_name == Timm_head_names.EVA_MODEL:
+            model_name == Timm_head_names.MAE or model_name == Timm_head_names.VIT_GIGANTIC or model_name == Timm_head_names.OPENAI_CLIP_MODEL or model_name == Timm_head_names.EVA_MODEL:
             # get rid of head
             self.backbone.head = Identity()
 

@@ -156,7 +156,7 @@ class SubspacesFilter:
 
     def run_filter(self,
         labeled_loader,
-        unlabeled_loader,
+        unlabeled_loader, validation_loader,
         dir_filtered_root = None, get_background_samples=True,
         num_classes:float=0):
 
@@ -349,43 +349,88 @@ class SubspacesFilter:
             scores += [distances_all[j].item()]
         scores = np.array(scores).reshape((len(scores),1))
 
-        
+        self.evaluate(unlabeled_loader, dir_filtered_root, "bbox_results")
+        self.evaluate(validation_loader, dir_filtered_root, "bbox_results_val")
+
+    def evaluate(self, dataloader, dir_filtered_root, result_name):
+        # go through each batch unlabeled
+        distances_all = 0
+
+        # keep track of the img id for every sample created by sam
+        imgs_ids = []
+        imgs_box_coords = []
+        imgs_scores = []
+
+        # 3. Get batch of unlabeled // Evaluating the likelihood of unlabeled data
+        for (batch_num, batch) in tqdm(
+            enumerate(dataloader), total= len(dataloader), desc="Iterate dataloader"
+        ):
+            unlabeled_imgs = []
+            # every batch is a tuple: (torch.imgs , metadata_and_bboxes)
+            # ITERATE: IMAGE
+            for idx in tqdm(list(range(batch[1]['img_idx'].numel())), desc="Iterate images"):
+                # get foreground samples (from sam)
+                imgs_s, box_coords, scores = self.sam_model.get_unlabeled_samples(
+                    batch, idx, self.trans_norm, self.use_sam_embeddings
+                )
+                unlabeled_imgs += imgs_s
+
+                # accumulate SAM info (inferences)
+                imgs_ids += [batch[1]['img_orig_id'][idx].item()] * len(imgs_s)
+                imgs_box_coords += box_coords
+                imgs_scores += scores
+
+            # get all features maps using: the extractor + the imgs
+            featuremaps_list = self.get_all_features(unlabeled_imgs)
+            featuremaps = torch.stack(featuremaps_list) # e.g. [387 x 512]
+
+            # init buffer with distances
+            support_set_distances = []
+            distances = self.predict(featuremaps)
+
+            support_set_distances = distances
+            
+            # accumulate
+            if (batch_num == 0):
+                distances_all = support_set_distances
+            else:
+                distances_all = torch.cat((distances_all, support_set_distances), 0)
+
+        # transform data 
+        scores = []
+        for j in range(0, distances_all.shape[0]):
+            scores += [distances_all[j].item()]
+        scores = np.array(scores).reshape((len(scores),1))
+
+        limit = self.threshold 
         # accumulate results
         results = []
         print("Scores: ", len(scores))
         count = 0
         for index, score in enumerate(scores):
-            if self.is_single_class:
-                limit = self.threshold 
-                if(score.item() <= limit):
-                    image_result = {
-                        'image_id': imgs_ids[index],
-                        'category_id': 1, # fix this
-                        'score': imgs_scores[index],
-                        'bbox': imgs_box_coords[index],
-                    }
-                    results.append(image_result)
-                    count=count+1
-                    print("Score.item(): ", score.item())
-            else:
-                if(score.item() == 0):
-                    image_result = {
-                        'image_id': imgs_ids[index],
-                        'category_id': 1, # fix this
-                        'score': imgs_scores[index],
-                        'bbox': imgs_box_coords[index],
-                    }
-                    results.append(image_result)
-                    count=count+1
-                    print("Score.item(): ", score.item())
+            if(score.item() <= limit):
+                image_result = {
+                    'image_id': imgs_ids[index],
+                    'category_id': 1, # fix this
+                    'score': imgs_scores[index],
+                    'bbox': imgs_box_coords[index],
+                }
+                results.append(image_result)
+                count=count+1
         print("Count: ", count)
 
         if len(results) > 0:
             # write output
-            results_file = f"{dir_filtered_root}/bbox_results.json"
+            results_file = f"{dir_filtered_root}/{result_name}.json"
+
             if os.path.isfile(results_file):
                 os.remove(results_file)
             json.dump(results, open(results_file, 'w'), indent=4)
+
+    def save_stats(self, dir_filtered_root, stats):
+        file_name_stats = f"{dir_filtered_root}/stats.json"
+        with open(file_name_stats, 'w') as file:
+            file.write(json.dumps(stats))
 
     def get_all_features(self, images):
         """

@@ -7,6 +7,7 @@ from engine.fastsam_model import FASTSAM
 from engine.mobilesam_model import MobileSAM
 from engine.subspaces_filter import SubspacesFilter
 from engine.slimsam_model import SlimSAM
+from sam_proposal.sam2_model import SAM2
 
 try:
     from apex import amp
@@ -81,6 +82,9 @@ def sam_simple(args, output_root):
     elif args.sam_proposal == Constants_SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
         sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.SAM2:
+        sam = SAM2(args)
+        sam.load_simple_mask()
     else:
         sam = SAM(args)
         sam.load_simple_mask()
@@ -145,6 +149,9 @@ def few_shot(args, is_single_class=None, output_root=None, fewshot_method=None):
         sam.load_simple_mask()
     elif args.sam_proposal == Constants_SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.SAM2:
+        sam = SAM2(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)
@@ -364,6 +371,9 @@ def ood_filter(args, output_root):
     elif args.sam_proposal == Constants_SamMethod.SLIM_SAM:
         sam = SlimSAM(args)
         sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.SAM2:
+        sam = SAM2(args)
+        sam.load_simple_mask()
     else:
         sam = SAM(args)
         sam.load_simple_mask()
@@ -530,6 +540,9 @@ def mahalanobis_filter(args, is_single_class=True, output_root=None, dim_red="sv
         sam.load_simple_mask()
     elif args.sam_proposal == Constants_SamMethod.EDGE_SAM:
         sam = EdgeSAM(args)
+        sam.load_simple_mask()
+    elif args.sam_proposal == Constants_SamMethod.SAM2:
+        sam = SAM2(args)
         sam.load_simple_mask()
     else:
         sam = SAM(args)

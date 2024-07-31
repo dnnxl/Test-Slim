@@ -35,6 +35,7 @@ class Constants_SamMethod:
     EDGE_SAM = 'edgesam'
     HQ_SAM = 'samhq'
     SLIM_SAM = 'slimsam'
+    SAM2 = 'sam2'
 
 class Constants_DimensionalityReductionMethod:
     SVD = 'svd'

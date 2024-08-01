@@ -7,7 +7,7 @@ from engine.fastsam_model import FASTSAM
 from engine.mobilesam_model import MobileSAM
 from engine.subspaces_filter import SubspacesFilter
 from engine.slimsam_model import SlimSAM
-from sam_proposal.sam2_model import SAM2
+from sam2_model import SAM2
 
 try:
     from apex import amp
